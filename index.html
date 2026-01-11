@@ -2,197 +2,95 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Feliz Cumpleaños Daniel - Partículas 3D</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <title>Feliz Cumpleaños Daniel</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tweakpane@4.0.1/dist/tweakpane.min.js"></script>
-
     <style>
-        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: 'Segoe UI', sans-serif; }
-        #video-container {
-            position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px;
-            border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,0.2);
-            transform: scaleX(-1); z-index: 5; background: #111;
-        }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        .ui-status { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
-        .tp-dfw { z-index: 100 !important; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        #video-container { position: fixed; bottom: 10px; right: 10px; width: 150px; border: 2px solid #444; z-index: 5; transform: scaleX(-1); }
+        .info { position: fixed; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
     </style>
 </head>
 <body>
-
-<div class="ui-status">
-    <h2 id="titulo">Cargando Experiencia...</h2>
-    <p>Cámara: <span id="status">Buscando...</span></p>
-    <p>Gesto: <span id="gesture-info">Esperando mano</span></p>
+<div class="info">
+    <h2 id="txt">Cargando...</h2>
+    <p id="gst">Mueve tu mano</p>
 </div>
-
-<div id="video-container">
-    <video id="webcam" autoplay playsinline></video>
-</div>
-
+<video id="webcam" style="display:none"></video>
+<div id="video-container"><canvas id="out" style="width:100%"></canvas></div>
 <script>
-    // --- VARIABLES ---
-    let handX = 0, handY = 0, handScale = 1;
-    let currentMode = 'saturno';
-    const PARTICLE_COUNT = 10000;
-    const videoElement = document.getElementById('webcam');
-    const statusEl = document.getElementById('status');
+    let hX=0, hY=0, hS=1, mode='sat';
+    const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const ren = new THREE.WebGLRenderer({antialias:true});
+    ren.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(ren.domElement);
+    cam.position.z = 15;
 
-    // --- ESCENA 3D ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 20;
+    const count = 8000, geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count*3), tar = new Float32Array(count*3), vel = new Float32Array(count*3);
+    for(let i=0; i<count*3; i++) pos[i]=(Math.random()-0.5)*40;
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({size:0.07, color:0x00ffff, transparent:true, blending:THREE.AdditiveBlending});
+    const pts = new THREE.Points(geo, mat); scene.add(pts);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(PARTICLE_COUNT * 3);
-    const targets = new Float32Array(PARTICLE_COUNT * 3);
-    const velocities = new Float32Array(PARTICLE_COUNT * 3);
-
-    for(let i=0; i<PARTICLE_COUNT*3; i++) positions[i] = (Math.random()-0.5)*50;
-
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ 
-        size: 0.1, 
-        color: 0x00ffff, 
-        transparent: true, 
-        blending: THREE.AdditiveBlending,
-        depthWrite: false 
-    });
-
-    const points = new THREE.Points(geo, mat);
-    scene.add(points);
-
-    // --- PLANTILLAS ---
-    function setTemplate(type) {
-        currentMode = type;
-        for (let i = 0; i < PARTICLE_COUNT; i++) {
-            const i3 = i * 3;
-            if (type === 'saturno') {
-                if (i < PARTICLE_COUNT * 0.6) {
-                    const phi = Math.acos(-1 + (2 * i) / (PARTICLE_COUNT * 0.6));
-                    const theta = Math.sqrt(PARTICLE_COUNT * 0.6 * Math.PI) * phi;
-                    targets[i3] = Math.cos(theta)*Math.sin(phi)*5;
-                    targets[i3+1] = Math.sin(theta)*Math.sin(phi)*5;
-                    targets[i3+2] = Math.cos(phi)*5;
+    function setForm(t){
+        mode=t;
+        for(let i=0;i<count;i++){
+            let i3=i*3;
+            if(t==='sat'){
+                if(i<count*0.6){
+                    let p=Math.acos(-1+(2*i)/(count*0.6)), th=Math.sqrt(count*0.6*Math.PI)*p;
+                    tar[i3]=Math.cos(th)*Math.sin(p)*4; tar[i3+1]=Math.sin(th)*Math.sin(p)*4; tar[i3+2]=Math.cos(p)*4;
                 } else {
-                    const a = Math.random() * Math.PI * 2;
-                    const r = 7 + Math.random() * 3;
-                    targets[i3] = Math.cos(a)*r;
-                    targets[i3+1] = (Math.random()-0.5)*0.5;
-                    targets[i3+2] = Math.sin(a)*r;
+                    let a=Math.random()*Math.PI*2, r=6+Math.random()*2;
+                    tar[i3]=Math.cos(a)*r; tar[i3+1]=(Math.random()-0.5)*0.3; tar[i3+2]=Math.sin(a)*r;
                 }
-            } else if (type === 'corazon') {
-                const t = Math.random() * Math.PI * 2;
-                targets[i3] = 0.5 * (16 * Math.pow(Math.sin(t), 3));
-                targets[i3+1] = 0.5 * (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
-                targets[i3+2] = (Math.random()-0.5)*2;
-            } else if (type === 'fuegos') {
-                // Posición inicial: centro de la mano
-                targets[i3] = 0; targets[i3+1] = 0; targets[i3+2] = 0;
-                // Velocidades de explosión
-                const speed = Math.random() * 0.6;
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos((Math.random() * 2) - 1);
-                velocities[i3] = Math.sin(phi) * Math.cos(theta) * speed;
-                velocities[i3+1] = Math.sin(phi) * Math.sin(theta) * speed;
-                velocities[i3+2] = Math.cos(phi) * speed;
+            } else {
+                let r=Math.random()*0.5, th=Math.random()*Math.PI*2, ph=Math.acos((Math.random()*2)-1);
+                vel[i3]=Math.sin(ph)*Math.cos(th)*r; vel[i3+1]=Math.sin(ph)*Math.sin(th)*r; vel[i3+2]=Math.cos(ph)*r;
+                tar[i3]=pts.position.x; tar[i3+1]=pts.position.y; tar[i3+2]=pts.position.z;
             }
         }
     }
 
-    // --- INICIAR CÁMARA (LÓGICA CORREGIDA) ---
-    function startCamera() {
-        if (typeof window.Hands === 'undefined') {
-            setTimeout(startCamera, 500);
-            return;
-        }
-
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-
-        hands.onResults((results) => {
-            statusEl.innerText = "Conectado ✅";
-            document.getElementById('titulo').innerText = "¡Feliz Cumpleaños Daniel! 🎂";
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const lm = results.multiHandLandmarks[0];
-                handX = (lm[9].x - 0.5) * 35;
-                handY = -(lm[9].y - 0.5) * 25;
-                const dist = Math.sqrt(Math.pow(lm[4].x - lm[8].x, 2) + Math.pow(lm[4].y - lm[8].y, 2));
-                handScale = dist * 10;
-                document.getElementById('gesture-info').innerText = dist < 0.05 ? "Puño Cerrado ✊" : "Mano Abierta 🖐️";
+    async function init(){
+        if(!window.Hands) return setTimeout(init, 500);
+        const hands = new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({maxNumHands:1, minDetectionConfidence:0.5});
+        hands.onResults(r => {
+            document.getElementById('txt').innerText="¡Feliz Cumpleaños Daniel!";
+            if(r.multiHandLandmarks && r.multiHandLandmarks[0]){
+                let l=r.multiHandLandmarks[0][9];
+                hX=(l.x-0.5)*30; hY=-(l.y-0.5)*20;
+                let d=Math.sqrt(Math.pow(r.multiHandLandmarks[0][4].x-r.multiHandLandmarks[0][8].x,2));
+                hS=d*10; document.getElementById('gst').innerText=d<0.05?"✊":"🖐️";
             }
         });
-
-        const cameraMedia = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 640, height: 480
-        });
-        cameraMedia.start();
+        const v = document.getElementById('webcam');
+        const c = new Camera(v, {onFrame:async()=>{await hands.send({image:v})}, width:640, height:480});
+        c.start();
     }
 
-    // --- INTERFAZ MODERNA ---
-    const pane = new Tweakpane.Pane({ title: 'Panel de Control' });
-    const params = { forma: 'saturno', color: '#00ffff', size: 0.1 };
+    const pane = new Tweakpane.Pane();
+    pane.addButton({title:'🎇 Fuegos Artificiales'}).on('click', ()=>setForm('fire'));
+    pane.addButton({title:'🪐 Saturno'}).on('click', ()=>setForm('sat'));
 
-    pane.addBinding(params, 'forma', { options: { Saturno: 'saturno', Corazón: 'corazon' } }).on('change', v => setTemplate(v.value));
-    pane.addBinding(params, 'color').on('change', v => mat.color.set(v.value));
-    pane.addBinding(params, 'size', {min: 0.01, max: 0.3}).on('change', v => mat.size = v.value);
-    
-    pane.addButton({title: '🎆 Fuegos Artificiales'}).on('click', () => {
-        setTemplate('fuegos');
-        // Resetear posiciones a la mano para la explosión
-        const pos = geo.attributes.position.array;
-        for(let i=0; i<PARTICLE_COUNT*3; i+=3) {
-            pos[i] = points.position.x; pos[i+1] = points.position.y; pos[i+2] = points.position.z;
+    setForm('sat'); init();
+    function loop(){
+        requestAnimationFrame(loop);
+        const p=geo.attributes.position.array;
+        for(let i=0; i<count*3; i++){
+            if(mode==='fire'){ p[i]+=vel[i]; if(i%3==1) vel[i]-=0.005; }
+            else { p[i]+=(tar[i]-p[i])*0.05; }
         }
-    });
-
-    // --- ANIMACIÓN ---
-    setTemplate('saturno');
-    startCamera();
-
-    function animate() {
-        requestAnimationFrame(animate);
-        const pos = geo.attributes.position.array;
-
-        if (currentMode === 'fuegos') {
-            for(let i=0; i<PARTICLE_COUNT*3; i+=3) {
-                pos[i] += velocities[i];
-                pos[i+1] += velocities[i+1];
-                pos[i+2] += velocities[i+2];
-                velocities[i+1] -= 0.005; // Gravedad
-            }
-        } else {
-            for(let i=0; i<PARTICLE_COUNT*3; i++) {
-                pos[i] += (targets[i] - pos[i]) * 0.05;
-            }
-        }
-
-        points.position.x += (handX - points.position.x) * 0.1;
-        points.position.y += (handY - points.position.y) * 0.1;
-        points.scale.setScalar(THREE.MathUtils.lerp(points.scale.x, Math.max(0.4, handScale), 0.1));
-        
-        points.rotation.y += 0.01;
-        geo.attributes.position.needsUpdate = true;
-        renderer.render(scene, camera);
+        pts.position.x+=(hX-pts.position.x)*0.1; pts.position.y+=(hY-pts.position.y)*0.1;
+        pts.scale.setScalar(THREE.MathUtils.lerp(pts.scale.x, Math.max(0.4, hS), 0.1));
+        pts.rotation.y+=0.01; geo.attributes.position.needsUpdate=true;
+        ren.render(scene, cam);
     }
-    animate();
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    loop();
 </script>
 </body>
 </html>
