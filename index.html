@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
     <title>Feliz Cumpleaños Daniel</title>
@@ -8,89 +8,86 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tweakpane@4.0.1/dist/tweakpane.min.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #video-container { position: fixed; bottom: 10px; right: 10px; width: 150px; border: 2px solid #444; z-index: 5; transform: scaleX(-1); }
-        .info { position: fixed; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+        body { margin: 0; background: #000; color: white; overflow: hidden; font-family: sans-serif; }
+        .ui { position: fixed; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
+        #video-ui { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #555; border-radius: 10px; transform: scaleX(-1); }
     </style>
 </head>
 <body>
-<div class="info">
-    <h2 id="txt">Cargando...</h2>
-    <p id="gst">Mueve tu mano</p>
-</div>
-<video id="webcam" style="display:none"></video>
-<div id="video-container"><canvas id="out" style="width:100%"></canvas></div>
+    <div class="ui">
+        <h1 id="msg">Iniciando...</h1>
+        <p id="gst">Permite la cámara para jugar</p>
+    </div>
+    <video id="input_video" style="display:none"></video>
+    <div id="video-ui"><canvas id="canvas_out" style="width:100%; height:100%"></canvas></div>
+
 <script>
-    let hX=0, hY=0, hS=1, mode='sat';
-    const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const ren = new THREE.WebGLRenderer({antialias:true});
-    ren.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(ren.domElement);
-    cam.position.z = 15;
+    // Configuración básica
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    camera.position.z = 15;
 
-    const count = 8000, geo = new THREE.BufferGeometry();
-    const pos = new Float32Array(count*3), tar = new Float32Array(count*3), vel = new Float32Array(count*3);
-    for(let i=0; i<count*3; i++) pos[i]=(Math.random()-0.5)*40;
+    // Partículas
+    const count = 5000;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const targets = new Float32Array(count * 3);
+    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*30;
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({size:0.07, color:0x00ffff, transparent:true, blending:THREE.AdditiveBlending});
-    const pts = new THREE.Points(geo, mat); scene.add(pts);
+    const mat = new THREE.PointsMaterial({size: 0.08, color: 0x00ffff, transparent: true, blending: THREE.AdditiveBlending});
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
 
-    function setForm(t){
-        mode=t;
-        for(let i=0;i<count;i++){
-            let i3=i*3;
-            if(t==='sat'){
-                if(i<count*0.6){
-                    let p=Math.acos(-1+(2*i)/(count*0.6)), th=Math.sqrt(count*0.6*Math.PI)*p;
-                    tar[i3]=Math.cos(th)*Math.sin(p)*4; tar[i3+1]=Math.sin(th)*Math.sin(p)*4; tar[i3+2]=Math.cos(p)*4;
-                } else {
-                    let a=Math.random()*Math.PI*2, r=6+Math.random()*2;
-                    tar[i3]=Math.cos(a)*r; tar[i3+1]=(Math.random()-0.5)*0.3; tar[i3+2]=Math.sin(a)*r;
-                }
+    // Formas
+    function makeSaturn() {
+        for(let i=0; i<count; i++) {
+            let i3 = i*3;
+            if(i < count*0.6) {
+                let p = Math.acos(-1+(2*i)/(count*0.6)), t = Math.sqrt(count*0.6*Math.PI)*p;
+                targets[i3] = Math.cos(t)*Math.sin(p)*4; targets[i3+1] = Math.sin(t)*Math.sin(p)*4; targets[i3+2] = Math.cos(p)*4;
             } else {
-                let r=Math.random()*0.5, th=Math.random()*Math.PI*2, ph=Math.acos((Math.random()*2)-1);
-                vel[i3]=Math.sin(ph)*Math.cos(th)*r; vel[i3+1]=Math.sin(ph)*Math.sin(th)*r; vel[i3+2]=Math.cos(ph)*r;
-                tar[i3]=pts.position.x; tar[i3+1]=pts.position.y; tar[i3+2]=pts.position.z;
+                let a = Math.random()*Math.PI*2, r = 6+Math.random()*2;
+                targets[i3] = Math.cos(a)*r; targets[i3+1] = (Math.random()-0.5)*0.2; targets[i3+2] = Math.sin(a)*r;
             }
         }
     }
+    makeSaturn();
 
-    async function init(){
+    // Mano y Cámara
+    let hX = 0, hY = 0;
+    function init() {
         if(!window.Hands) return setTimeout(init, 500);
-        const hands = new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-        hands.setOptions({maxNumHands:1, minDetectionConfidence:0.5});
-        hands.onResults(r => {
-            document.getElementById('txt').innerText="¡Feliz Cumpleaños Daniel!";
-            if(r.multiHandLandmarks && r.multiHandLandmarks[0]){
-                let l=r.multiHandLandmarks[0][9];
-                hX=(l.x-0.5)*30; hY=-(l.y-0.5)*20;
-                let d=Math.sqrt(Math.pow(r.multiHandLandmarks[0][4].x-r.multiHandLandmarks[0][8].x,2));
-                hS=d*10; document.getElementById('gst').innerText=d<0.05?"✊":"🖐️";
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
+        hands.onResults(res => {
+            document.getElementById('msg').innerText = "¡Feliz Cumpleaños Daniel!";
+            if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
+                let m = res.multiHandLandmarks[0][9];
+                hX = (m.x - 0.5) * 30; hY = -(m.y - 0.5) * 20;
+                document.getElementById('gst').innerText = "¡Te veo! 👋";
             }
         });
-        const v = document.getElementById('webcam');
-        const c = new Camera(v, {onFrame:async()=>{await hands.send({image:v})}, width:640, height:480});
-        c.start();
+        const video = document.getElementById('input_video');
+        const cam = new Camera(video, {onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480});
+        cam.start();
     }
+    init();
 
-    const pane = new Tweakpane.Pane();
-    pane.addButton({title:'🎇 Fuegos Artificiales'}).on('click', ()=>setForm('fire'));
-    pane.addButton({title:'🪐 Saturno'}).on('click', ()=>setForm('sat'));
-
-    setForm('sat'); init();
-    function loop(){
-        requestAnimationFrame(loop);
-        const p=geo.attributes.position.array;
-        for(let i=0; i<count*3; i++){
-            if(mode==='fire'){ p[i]+=vel[i]; if(i%3==1) vel[i]-=0.005; }
-            else { p[i]+=(tar[i]-p[i])*0.05; }
-        }
-        pts.position.x+=(hX-pts.position.x)*0.1; pts.position.y+=(hY-pts.position.y)*0.1;
-        pts.scale.setScalar(THREE.MathUtils.lerp(pts.scale.x, Math.max(0.4, hS), 0.1));
-        pts.rotation.y+=0.01; geo.attributes.position.needsUpdate=true;
-        ren.render(scene, cam);
+    // Animación
+    function draw() {
+        requestAnimationFrame(draw);
+        const p = geo.attributes.position.array;
+        for(let i=0; i<count*3; i++) p[i] += (targets[i] - p[i]) * 0.05;
+        points.position.x += (hX - points.position.x) * 0.1;
+        points.position.y += (hY - points.position.y) * 0.1;
+        points.rotation.y += 0.01;
+        geo.attributes.position.needsUpdate = true;
+        renderer.render(scene, camera);
     }
-    loop();
+    draw();
 </script>
 </body>
 </html>
