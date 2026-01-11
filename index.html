@@ -2,23 +2,17 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Feliz Cumpleaños</title>
-    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.0.7/dist/tweakpane.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <title>Regalo Mágico</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
-        #video_local { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #0ff; border-radius: 10px; transform: scaleX(-1); z-index: 10; object-fit: cover; }
-        #mensaje { position: fixed; top: 20px; left: 20px; z-index: 5; }
+        body { margin: 0; background: #000; overflow: hidden; }
+        #input_video { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #0ff; border-radius: 10px; transform: scaleX(-1); z-index: 5; object-fit: cover; }
     </style>
 </head>
 <body>
-    <div id="mensaje">
-        <h1 id="aviso">Cargando...</h1>
-        <p id="sub">Mueve tu mano al verte en el cuadro</p>
-    </div>
-    <video id="video_local" autoplay playsinline></video>
+    <video id="input_video" autoplay playsinline></video>
 
 <script>
     const scene = new THREE.Scene();
@@ -28,49 +22,82 @@
     document.body.appendChild(renderer.domElement);
     camera.position.z = 15;
 
-    const count = 5000;
+    const count = 6000;
     const geo = new THREE.BufferGeometry();
-    const pos = new Float32Array(count * 3);
+    const positions = new Float32Array(count * 3);
     const targets = new Float32Array(count * 3);
-    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*40;
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const points = new THREE.Points(geo, new THREE.PointsMaterial({size: 0.08, color: 0x00ffff, transparent: true, blending: THREE.AdditiveBlending}));
-    scene.add(points);
+    
+    // Formas (Coordinadas)
+    const formas = {
+        fuego: [],
+        corazon: [],
+        arbol: [],
+        saturno: []
+    };
 
+    // Crear las formas matemáticamente
     for(let i=0; i<count; i++) {
-        let i3 = i*3;
-        if(i < count*0.6) {
-            let p = Math.acos(-1+(2*i)/(count*0.6)), t = Math.sqrt(count*0.6*Math.PI)*p;
-            targets[i3] = Math.cos(t)*Math.sin(p)*4; targets[i3+1] = Math.sin(t)*Math.sin(p)*4; targets[i3+2] = Math.cos(p)*4;
-        } else {
-            let a = Math.random()*Math.PI*2, r = 6+Math.random()*2;
-            targets[i3] = Math.cos(a)*r; targets[i3+1] = (Math.random()-0.5)*0.2; targets[i3+2] = Math.sin(a)*r;
+        // 1. FUEGO ARTIFICIAL (Explosión)
+        let r_f = Math.random() * 8, theta_f = Math.random() * Math.PI * 2, phi_f = Math.random() * Math.PI;
+        formas.fuego.push(r_f * Math.sin(phi_f) * Math.cos(theta_f), r_f * Math.sin(phi_f) * Math.sin(theta_f), r_f * Math.cos(phi_f));
+
+        // 2. CORAZÓN
+        let t = Math.random() * Math.PI * 2;
+        let x_c = 16 * Math.pow(Math.sin(t), 3);
+        let y_c = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+        formas.corazon.push(x_c * 0.4, y_c * 0.4, (Math.random()-0.5) * 2);
+
+        // 3. ÁRBOL DE NAVIDAD (Cono)
+        let h = Math.random() * 12 - 6;
+        let r_a = (6 - h) * 0.5;
+        let ang = Math.random() * Math.PI * 2;
+        formas.arbol.push(Math.cos(ang) * r_a, h, Math.sin(ang) * r_a);
+
+        // 4. SATURNO
+        if(i < count*0.6) { // Esfera
+            let p = Math.acos(-1+(2*i)/(count*0.6)), th = Math.sqrt(count*0.6*Math.PI)*p;
+            formas.saturno.push(Math.cos(th)*Math.sin(p)*4, Math.sin(th)*Math.sin(p)*4, Math.cos(p)*4);
+        } else { // Anillo
+            let a = Math.random()*Math.PI*2, rr = 6+Math.random()*2;
+            formas.saturno.push(Math.cos(a)*rr, (Math.random()-0.5)*0.2, Math.sin(a)*rr);
         }
     }
 
-    let handX = 0, handY = 0;
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({size: 0.07, color: 0x00ffff, transparent: true, blending: THREE.AdditiveBlending});
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
 
-    async function setup() {
-        const hands = new Hands({locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" + file});
-        hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
-        hands.onResults(res => {
-            document.getElementById('aviso').innerText = "¡FELIZ CUMPLEAÑOS DANIEL!";
-            if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
-                document.getElementById('sub').innerText = "¡Mano detectada! 🪐";
-                let m = res.multiHandLandmarks[0][9];
-                handX = (m.x - 0.5) * 35; handY = -(m.y - 0.5) * 25;
-            }
-        });
-
-        const video = document.getElementById('video_local');
-        const cam = new Camera(video, {
-            onFrame: async () => { await hands.send({image: video}); },
-            width: 640, height: 480
-        });
-        cam.start();
+    // Lógica de cambio de forma
+    let fase = 0;
+    const nombresFases = ['fuego', 'corazon', 'arbol', 'saturno'];
+    
+    function cambiarForma() {
+        let formaActual = nombresFases[fase];
+        let data = formas[formaActual];
+        for(let i=0; i<count*3; i++) targets[i] = data[i];
+        fase = (fase + 1) % nombresFases.length;
     }
+    
+    setInterval(cambiarForma, 4000); // Cambia cada 4 segundos
+    cambiarForma();
 
-    window.onload = setup;
+    // Inteligencia de Mano
+    let handX = 0, handY = 0;
+    const hands = new Hands({locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" + file});
+    hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
+    hands.onResults(res => {
+        if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
+            let m = res.multiHandLandmarks[0][9];
+            handX = (m.x - 0.5) * 35; handY = -(m.y - 0.5) * 25;
+        }
+    });
+
+    const cam = new Camera(document.getElementById('input_video'), {
+        onFrame: async () => { await hands.send({image: document.getElementById('input_video')}); },
+        width: 640, height: 480
+    });
+    cam.start();
 
     function draw() {
         requestAnimationFrame(draw);
@@ -78,7 +105,7 @@
         for(let i=0; i<count*3; i++) p[i] += (targets[i] - p[i]) * 0.05;
         points.position.x += (handX - points.position.x) * 0.1;
         points.position.y += (handY - points.position.y) * 0.1;
-        points.rotation.y += 0.005;
+        points.rotation.y += 0.01;
         geo.attributes.position.needsUpdate = true;
         renderer.render(scene, camera);
     }
@@ -86,4 +113,3 @@
 </script>
 </body>
 </html>
-
