@@ -2,19 +2,20 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <title>Regalo para Daniel</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
-        #video_local { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #0ff; border-radius: 10px; transform: scaleX(-1); z-index: 10; object-fit: cover; }
-        .texto { position: fixed; top: 20px; left: 20px; z-index: 5; }
+        #video_local { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #0ff; border-radius: 10px; transform: scaleX(-1); z-index: 10; object-fit: cover; background: #222; }
+        .texto { position: fixed; top: 20px; left: 20px; z-index: 5; pointer-events: none; }
     </style>
 </head>
 <body>
     <div class="texto">
-        <h1 id="aviso">Cargando Inteligencia...</h1>
-        <p id="sub">Mueve tu mano frente a la cámara</p>
+        <h1 id="aviso">Permite la cámara...</h1>
+        <p id="sub">Esperando conexión</p>
     </div>
     <video id="video_local" autoplay playsinline></video>
 
@@ -26,11 +27,12 @@
     document.body.appendChild(renderer.domElement);
     camera.position.z = 15;
 
-    const count = 5000;
+    // Crear Saturno
+    const count = 6000;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(count * 3);
     const targets = new Float32Array(count * 3);
-    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*30;
+    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*40;
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({size: 0.08, color: 0x00ffff, transparent: true, blending: THREE.AdditiveBlending});
     const points = new THREE.Points(geo, mat);
@@ -48,36 +50,45 @@
     }
 
     let handX = 0, handY = 0;
+
     async function setup() {
-        // Usamos una versión específica y más estable de los archivos
-        const hands = new Hands({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }});
+        if(!window.Hands) { setTimeout(setup, 500); return; }
 
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
+        
         hands.onResults(res => {
-            // Esto confirma que la inteligencia ya está funcionando
             document.getElementById('aviso').innerText = "¡FELIZ CUMPLEAÑOS DANIEL!";
             if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
-                document.getElementById('sub').innerText = "¡Mano detectada! 👋";
+                document.getElementById('sub').innerText = "¡Te veo! Mueve la mano 👋";
                 let m = res.multiHandLandmarks[0][9];
-                handX = (m.x - 0.5) * 35; 
-                handY = -(m.y - 0.5) * 25;
+                handX = (m.x - 0.5) * 35; handY = -(m.y - 0.5) * 25;
             } else {
-                document.getElementById('sub').innerText = "Buscando tu mano...";
+                document.getElementById('sub').innerText = "Pon tu mano frente a la cámara";
             }
         });
 
         const video = document.getElementById('video_local');
-        const cameraMedia = new Camera(video, {
+        const cam = new Camera(video, {
             onFrame: async () => { await hands.send({image: video}); },
             width: 640, height: 480
         });
-        cameraMedia.start();
+        cam.start();
     }
+
+    setup();
+
+    function draw() {
+        requestAnimationFrame(draw);
+        const p = geo.attributes.position.array;
+        for(let i=0; i<count*3; i++) p[i] += (targets[i] - p[i]) * 0.05;
+        points.position.x += (handX - points.position.x) * 0.1;
+        points.position.y += (handY - points.position.y) * 0.1;
+        points.rotation.y += 0.005;
+        geo.attributes.position.needsUpdate = true;
+        renderer.render(scene, camera);
+    }
+    draw();
+</script>
+</body>
+</html>
