@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Feliz Cumpleaños Daniel</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <title>Daniel</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
@@ -14,13 +14,12 @@
 </head>
 <body>
     <div class="texto">
-        <h1 id="aviso">Iniciando Regalo...</h1>
-        <p id="sub">Mueve tu mano frente a la cámara</p>
+        <h1 id="aviso">Conectando...</h1>
+        <p id="sub">Si te ves en el cuadro, mueve tu mano 🖐️</p>
     </div>
     <video id="video_local" autoplay playsinline></video>
 
 <script>
-    // 1. ESCENA VISUAL
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({antialias: true});
@@ -28,7 +27,6 @@
     document.body.appendChild(renderer.domElement);
     camera.position.z = 15;
 
-    // 2. CREAR SATURNO
     const count = 5000;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(count * 3);
@@ -50,27 +48,32 @@
         }
     }
 
-    // 3. MOVIMIENTO (INTELIGENCIA ARTIFICIAL)
     let handX = 0, handY = 0;
+
     async function setup() {
         if(!window.Hands) { setTimeout(setup, 500); return; }
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
         hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
+        
         hands.onResults(res => {
+            // Cuando esto ocurre, el sistema por fin está "vivo"
             document.getElementById('aviso').innerText = "¡FELIZ CUMPLEAÑOS DANIEL!";
             if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
-                document.getElementById('sub').innerText = "¡Te veo! Mueve la mano 👋";
+                document.getElementById('sub').innerText = "¡Mano detectada! 🪐";
                 let m = res.multiHandLandmarks[0][9];
                 handX = (m.x - 0.5) * 35; handY = -(m.y - 0.5) * 25;
             }
         });
+
         const video = document.getElementById('video_local');
-        const cam = new Camera(video, {onFrame: async () => { await hands.send({image: video}); }, width: 640, height: 480});
+        const cam = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 640, height: 480
+        });
         cam.start();
     }
     setup();
 
-    // 4. BUCLE DE ANIMACIÓN
     function draw() {
         requestAnimationFrame(draw);
         const p = geo.attributes.position.array;
