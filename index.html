@@ -1,115 +1,150 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Regalo Mágico</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Particles Fix</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        #input_video { position: fixed; bottom: 20px; right: 20px; width: 180px; height: 135px; border: 2px solid #0ff; border-radius: 10px; transform: scaleX(-1); z-index: 5; object-fit: cover; }
+        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
+        #video-container {
+            position: fixed; bottom: 20px; right: 20px; width: 200px; height: 150px;
+            border-radius: 10px; overflow: hidden; border: 2px solid #555; transform: scaleX(-1);
+        }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .ui { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
     </style>
 </head>
 <body>
-    <video id="input_video" autoplay playsinline></video>
 
-<script>
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({antialias: true});
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-    camera.position.z = 15;
+<div class="ui">
+    <h2>Sistema de Partículas</h2>
+    <p>Estado Cámara: <span id="status">Cargando...</span></p>
+</div>
 
-    const count = 6000;
-    const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const targets = new Float32Array(count * 3);
-    
-    // Formas (Coordinadas)
-    const formas = {
-        fuego: [],
-        corazon: [],
-        arbol: [],
-        saturno: []
-    };
+<div id="video-container">
+    <video id="webcam" autoplay playsinline></video>
+</div>
 
-    // Crear las formas matemáticamente
-    for(let i=0; i<count; i++) {
-        // 1. FUEGO ARTIFICIAL (Explosión)
-        let r_f = Math.random() * 8, theta_f = Math.random() * Math.PI * 2, phi_f = Math.random() * Math.PI;
-        formas.fuego.push(r_f * Math.sin(phi_f) * Math.cos(theta_f), r_f * Math.sin(phi_f) * Math.sin(theta_f), r_f * Math.cos(phi_f));
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "tweakpane": "https://cdn.jsdelivr.net/npm/tweakpane@4.0.1/dist/tweakpane.min.js"
+        }
+    }
+</script>
 
-        // 2. CORAZÓN
-        let t = Math.random() * Math.PI * 2;
-        let x_c = 16 * Math.pow(Math.sin(t), 3);
-        let y_c = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-        formas.corazon.push(x_c * 0.4, y_c * 0.4, (Math.random()-0.5) * 2);
+<script type="module">
+    import * as THREE from 'three';
+    import { Pane } from 'tweakpane';
 
-        // 3. ÁRBOL DE NAVIDAD (Cono)
-        let h = Math.random() * 12 - 6;
-        let r_a = (6 - h) * 0.5;
-        let ang = Math.random() * Math.PI * 2;
-        formas.arbol.push(Math.cos(ang) * r_a, h, Math.sin(ang) * r_a);
+    // --- VARIABLES GLOBALES ---
+    let handX = 0, handY = 0, handScale = 1;
+    const videoElement = document.getElementById('webcam');
+    const statusEl = document.getElementById('status');
 
-        // 4. SATURNO
-        if(i < count*0.6) { // Esfera
-            let p = Math.acos(-1+(2*i)/(count*0.6)), th = Math.sqrt(count*0.6*Math.PI)*p;
-            formas.saturno.push(Math.cos(th)*Math.sin(p)*4, Math.sin(th)*Math.sin(p)*4, Math.cos(p)*4);
-        } else { // Anillo
-            let a = Math.random()*Math.PI*2, rr = 6+Math.random()*2;
-            formas.saturno.push(Math.cos(a)*rr, (Math.random()-0.5)*0.2, Math.sin(a)*rr);
+    // --- CONFIGURACIÓN DE HANDS (CORREGIDA) ---
+    async function initMediaPipe() {
+        try {
+            // Usamos la instancia global que cargamos en el <head>
+            const hands = new window.Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults((results) => {
+                statusEl.innerText = "Conectado ✅";
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const lm = results.multiHandLandmarks[0];
+                    handX = (lm[9].x - 0.5) * 30;
+                    handY = -(lm[9].y - 0.5) * 20;
+                    const dx = lm[4].x - lm[8].x;
+                    const dy = lm[4].y - lm[8].y;
+                    handScale = Math.sqrt(dx*dx + dy*dy) * 10;
+                }
+            });
+
+            const camera = new window.Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({image: videoElement});
+                },
+                width: 640, height: 480
+            });
+            camera.start();
+        } catch (e) {
+            console.error(e);
+            statusEl.innerText = "Error: " + e.message;
         }
     }
 
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({size: 0.07, color: 0x00ffff, transparent: true, blending: THREE.AdditiveBlending});
+    // --- ESCENA THREE.JS ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 15;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const count = 5000;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const target = new Float32Array(count * 3);
+
+    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*20;
+
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.07, color: 0x00ffcc, transparent: true, blending: THREE.AdditiveBlending });
     const points = new THREE.Points(geo, mat);
     scene.add(points);
 
-    // Lógica de cambio de forma
-    let fase = 0;
-    const nombresFases = ['fuego', 'corazon', 'arbol', 'saturno'];
-    
-    function cambiarForma() {
-        let formaActual = nombresFases[fase];
-        let data = formas[formaActual];
-        for(let i=0; i<count*3; i++) targets[i] = data[i];
-        fase = (fase + 1) % nombresFases.length;
-    }
-    
-    setInterval(cambiarForma, 4000); // Cambia cada 4 segundos
-    cambiarForma();
-
-    // Inteligencia de Mano
-    let handX = 0, handY = 0;
-    const hands = new Hands({locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/hands/" + file});
-    hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5});
-    hands.onResults(res => {
-        if(res.multiHandLandmarks && res.multiHandLandmarks[0]) {
-            let m = res.multiHandLandmarks[0][9];
-            handX = (m.x - 0.5) * 35; handY = -(m.y - 0.5) * 25;
+    // Plantilla Saturno inicial
+    for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        if (i < count * 0.6) {
+            const phi = Math.acos(-1 + (2 * i) / (count * 0.6));
+            const theta = Math.sqrt(count * 0.6 * Math.PI) * phi;
+            target[i3] = Math.cos(theta)*Math.sin(phi)*4;
+            target[i3+1] = Math.sin(theta)*Math.sin(phi)*4;
+            target[i3+2] = Math.cos(phi)*4;
+        } else {
+            const a = Math.random() * Math.PI * 2;
+            const r = 6 + Math.random() * 2;
+            target[i3] = Math.cos(a)*r;
+            target[i3+1] = (Math.random()-0.5)*0.3;
+            target[i3+2] = Math.sin(a)*r;
         }
-    });
+    }
 
-    const cam = new Camera(document.getElementById('input_video'), {
-        onFrame: async () => { await hands.send({image: document.getElementById('input_video')}); },
-        width: 640, height: 480
-    });
-    cam.start();
-
-    function draw() {
-        requestAnimationFrame(draw);
-        const p = geo.attributes.position.array;
-        for(let i=0; i<count*3; i++) p[i] += (targets[i] - p[i]) * 0.05;
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        const currentPos = geo.attributes.position.array;
+        for(let i=0; i<count*3; i++) {
+            currentPos[i] += (target[i] - currentPos[i]) * 0.05;
+        }
+        
         points.position.x += (handX - points.position.x) * 0.1;
         points.position.y += (handY - points.position.y) * 0.1;
+        points.scale.setScalar(THREE.MathUtils.lerp(points.scale.x, Math.max(0.5, handScale), 0.1));
+        
         points.rotation.y += 0.01;
         geo.attributes.position.needsUpdate = true;
         renderer.render(scene, camera);
     }
-    draw();
+
+    // Iniciar
+    initMediaPipe();
+    animate();
 </script>
 </body>
 </html>
